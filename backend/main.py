@@ -47,20 +47,21 @@ panoramas_collection = None
 ALLOWED_EXTENSIONS = {'jpg', 'jpeg', 'png', 'webp'}
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
 
-try:
-    if not MONGO_URI:
-        raise ValueError("錯誤：找不到 MONGO_URI 環境變數")
+if MONGO_URI:
+    try:
+        client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
+        client.admin.command('ping')
+        logging.info("✅ 成功連線至 MongoDB！")
 
-    client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
-    client.admin.command('ping')
-    logging.info("✅ 成功連線至 MongoDB！")
-
-    db = client['panorama_db']
-    fs = GridFS(db)
-    panoramas_collection = db['panoramas']
-
-except Exception as e:
-    logging.error(f"❌ MongoDB 連線失敗: {e}")
+        db = client['panorama_db']
+        fs = GridFS(db)
+        panoramas_collection = db['panoramas']
+    except Exception as e:
+        logging.error(f"❌ MongoDB 連線失敗: {e}")
+        logging.warning("⚠️ 應用將在沒有資料庫的情況下啟動")
+else:
+    logging.warning("⚠️ 未設定 MONGO_URI 環境變數")
+    logging.warning("⚠️ 應用將在沒有資料庫的情況下啟動")
 
 # 輔助函式
 def allowed_file(filename):
