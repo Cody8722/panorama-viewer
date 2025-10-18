@@ -15,20 +15,13 @@ load_dotenv()
 
 app = Flask(__name__)
 
-# CORS 設定 - 允許前端域名
-CORS(app, resources={
-    r"/*": {
-        "origins": [
-            "https://panorama-viewer.zeabur.app",
-            "http://localhost:8080",
-            "http://127.0.0.1:8080",
-            "http://localhost:5500"  # Live Server
-        ],
-        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        "allow_headers": ["Content-Type", "X-Admin-Secret"],
-        "supports_credentials": True
-    }
-})
+# CORS 設定 - 允許所有來源（開發/測試用）
+# 生產環境建議限制特定域名
+CORS(app,
+     origins="*",  # 允許所有來源
+     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+     allow_headers=["Content-Type", "X-Admin-Secret"],
+     supports_credentials=False)
 
 # 設定日誌
 logging.basicConfig(level=logging.INFO)
