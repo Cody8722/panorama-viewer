@@ -98,7 +98,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Deploy to Zeabur
-        uses: zeabur/deploy-action@v1
+        uses: zeabur/zeabur-action@1
         with:
           api-key: ${{ secrets.ZEABUR_API_KEY }}
           service-id: ${{ secrets.ZEABUR_SERVICE_ID }}
