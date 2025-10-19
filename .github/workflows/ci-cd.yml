@@ -87,8 +87,8 @@ jobs:
             echo "⚠ No Dockerfile found, skipping Docker build"
           fi
 
-  deploy:
-    name: Deploy to Zeabur
+  deploy-backend:
+    name: Deploy Backend to Zeabur
     needs: [lint-and-test, docker-build]
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
@@ -97,8 +97,24 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Deploy to Zeabur
-        uses: zeabur/zeabur-action@1
-        with:
-          api-key: ${{ secrets.ZEABUR_API_KEY }}
-          service-id: ${{ secrets.ZEABUR_SERVICE_ID }}
+      - name: Trigger Zeabur Backend Deployment
+        run: |
+          echo "✅ Tests passed! Zeabur will auto-deploy backend from this Git push."
+          echo "Backend Service ID: ${{ secrets.ZEABUR_BACKEND_SERVICE_ID }}"
+          echo "Monitor deployment at: https://zeabur.com/projects/68bc51327e9d8873889d0ad6/services/${{ secrets.ZEABUR_BACKEND_SERVICE_ID }}"
+
+  deploy-frontend:
+    name: Deploy Frontend to Zeabur
+    needs: [lint-and-test, docker-build]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Trigger Zeabur Frontend Deployment
+        run: |
+          echo "✅ Tests passed! Zeabur will auto-deploy frontend from this Git push."
+          echo "Frontend Service ID: ${{ secrets.ZEABUR_FRONTEND_SERVICE_ID }}"
+          echo "Monitor deployment at: https://zeabur.com/projects/68bc51327e9d8873889d0ad6/services/${{ secrets.ZEABUR_FRONTEND_SERVICE_ID }}"
