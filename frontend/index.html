@@ -254,6 +254,41 @@
         </div>
     </div>
 
+    <!-- 刪除確認對話框 -->
+    <div id="deleteModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+        <div class="bg-white rounded-lg p-8 max-w-md w-full mx-4">
+            <h3 class="text-2xl font-semibold text-gray-800 mb-4">
+                <i class="fas fa-exclamation-triangle text-red-500 mr-2"></i>刪除全景圖
+            </h3>
+
+            <p class="text-gray-600 mb-4">
+                確定要刪除這張全景圖嗎？此操作無法復原。
+            </p>
+
+            <form id="deleteForm" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        管理員密碼 <span class="text-red-500">*</span>
+                    </label>
+                    <input type="password" id="deletePassword" required
+                           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
+                           placeholder="請輸入管理員密碼">
+                    <p class="mt-1 text-sm text-gray-500">密碼在 Zeabur 環境變數 ADMIN_SECRET 中設定</p>
+                </div>
+
+                <div class="flex space-x-4">
+                    <button type="submit" class="flex-1 bg-red-500 hover:bg-red-600 text-white py-2 px-4 rounded-lg">
+                        <i class="fas fa-trash mr-2"></i>確認刪除
+                    </button>
+                    <button type="button" onclick="closeDeleteModal()"
+                            class="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-800 py-2 px-4 rounded-lg">
+                        取消
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script>
         let panoramas = [];
         let currentPanoramaId = null;
@@ -268,6 +303,9 @@
 
             // 編輯表單處理
             document.getElementById('editForm').addEventListener('submit', handleEdit);
+
+            // 刪除表單處理
+            document.getElementById('deleteForm').addEventListener('submit', handleDelete);
 
             // 檔案選擇時自動填入標題
             document.getElementById('fileInput').addEventListener('change', function(e) {
@@ -492,24 +530,52 @@
             }
         }
 
-        // 刪除全景圖
-        async function deletePanorama() {
+        // 打開刪除對話框
+        function deletePanorama() {
             if (!currentPanoramaId) return;
 
-            if (!confirm('確定要刪除這張全景圖嗎？此操作無法復原。')) {
-                return;
-            }
+            // 清空密碼輸入框
+            document.getElementById('deletePassword').value = '';
+
+            // 顯示對話框
+            document.getElementById('deleteModal').classList.remove('hidden');
+            document.getElementById('deleteModal').classList.add('flex');
+        }
+
+        // 關閉刪除對話框
+        function closeDeleteModal() {
+            document.getElementById('deleteModal').classList.add('hidden');
+            document.getElementById('deleteModal').classList.remove('flex');
+            document.getElementById('deletePassword').value = '';
+        }
+
+        // 處理刪除（帶密碼驗證）
+        async function handleDelete(e) {
+            e.preventDefault();
+
+            if (!currentPanoramaId) return;
+
+            const password = document.getElementById('deletePassword').value;
 
             try {
+                const headers = {
+                    'X-Admin-Secret': password
+                };
+
                 const response = await fetch(`${window.BACKEND_URL}/api/panoramas/${currentPanoramaId}`, {
-                    method: 'DELETE'
+                    method: 'DELETE',
+                    headers: headers
                 });
 
                 if (!response.ok) {
+                    if (response.status === 403) {
+                        throw new Error('管理員密碼錯誤');
+                    }
                     throw new Error('刪除失敗');
                 }
 
                 showNotification('刪除成功！', 'success');
+                closeDeleteModal();
 
                 // 銷毀查看器
                 if (viewer) {
@@ -527,7 +593,7 @@
 
             } catch (error) {
                 console.error('刪除失敗:', error);
-                showNotification('刪除失敗', 'error');
+                showNotification(error.message || '刪除失敗', 'error');
             }
         }
 
@@ -577,10 +643,9 @@
         function sharePanorama() {
             if (!currentPanoramaId) return;
 
-            // 生成分享連結
-            const currentUrl = window.location.origin + window.location.pathname;
-            const viewerUrl = currentUrl.replace('index.html', 'viewer.html');
-            const shareUrl = `${viewerUrl}?id=${currentPanoramaId}`;
+            // 生成分享連結（使用絕對路徑）
+            const baseUrl = window.location.origin;
+            const shareUrl = `${baseUrl}/viewer.html?id=${currentPanoramaId}`;
 
             // 顯示在對話框中
             document.getElementById('shareLink').value = shareUrl;
