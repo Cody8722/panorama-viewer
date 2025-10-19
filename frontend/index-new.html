@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>全景圖瀏覽器 - Panorama Viewer</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Pannellum CSS & JS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.css"/>
+    <script src="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.js"></script>
+
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"/>
+
+    <style>
+        #panorama {
+            width: 100%;
+            height: 70vh;
+            border-radius: 0.5rem;
+        }
+
+        .panorama-item:hover, .album-item:hover {
+            background-color: #f3f4f6;
+            cursor: pointer;
+        }
+
+        .panorama-item.active, .album-item.active {
+            background-color: #dbeafe;
+            border-left: 4px solid #3b82f6;
+        }
+
+        .loading {
+            display: none;
+        }
+
+        .loading.active {
+            display: block;
+        }
+
+        .tab-button {
+            padding: 0.75rem 1.5rem;
+            border-bottom: 2px solid transparent;
+            transition: all 0.3s;
+        }
+
+        .tab-button.active {
+            border-bottom-color: #3b82f6;
+            color: #3b82f6;
+            font-weight: 600;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .panorama-checkbox:checked + label {
+            background-color: #dbeafe;
+            border-color: #3b82f6;
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <!-- 後端 URL 設定 -->
+    <script>
+        window.BACKEND_URL = 'https://panorama-viewe-back.zeabur.app';
+    </script>
+
+    <div class="container mx-auto px-4 py-8">
+        <!-- 標題 -->
+        <div class="text-center mb-8">
+            <h1 class="text-4xl font-bold text-gray-800 mb-2">
+                <i class="fas fa-globe text-blue-500"></i> 全景圖瀏覽器
+            </h1>
+            <p class="text-gray-600">上傳、瀏覽和管理您的 360° 全景圖片與合輯</p>
+        </div>
+
+        <!-- 標籤切換 -->
+        <div class="bg-white rounded-lg shadow-md mb-8">
+            <div class="flex border-b">
+                <button class="tab-button active" onclick="switchTab('panoramas')">
+                    <i class="fas fa-image mr-2"></i>全景圖管理
+                </button>
+                <button class="tab-button" onclick="switchTab('albums')">
+                    <i class="fas fa-layer-group mr-2"></i>合輯管理
+                </button>
+            </div>
+
+            <!-- 全景圖管理標籤 -->
+            <div id="panoramas-tab" class="tab-content active p-6">
+                <!-- 上傳區域 -->
+                <div class="mb-8">
+                    <h2 class="text-2xl font-semibold text-gray-800 mb-4">
+                        <i class="fas fa-cloud-upload-alt text-blue-500"></i> 上傳全景圖
+                    </h2>
+
+                    <form id="uploadForm" class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">
+                                選擇全景圖片 <span class="text-red-500">*</span>
+                            </label>
+                            <input type="file" id="fileInput" accept="image/*" required
+                                   class="block w-full text-sm text-gray-500
+                                          file:mr-4 file:py-2 file:px-4
+                                          file:rounded-full file:border-0
+                                          file:text-sm file:font-semibold
+                                          file:bg-blue-50 file:text-blue-700
+                                          hover:file:bg-blue-100"/>
+                            <p class="mt-1 text-sm text-gray-500">支援格式: JPG, PNG, WEBP（最大 50MB）</p>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">
+                                    標題 <span class="text-red-500">*</span>
+                                </label>
+                                <input type="text" id="titleInput" required
+                                       class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                       placeholder="例如: 美麗的海邊風景">
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">
+                                    描述（選填）
+                                </label>
+                                <input type="text" id="descriptionInput"
+                                       class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                       placeholder="添加一些描述...">
+                            </div>
+                        </div>
+
+                        <button type="submit" id="uploadBtn"
+                                class="w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 px-6 rounded-lg transition duration-200 flex items-center justify-center">
+                            <i class="fas fa-upload mr-2"></i>
+                            <span>上傳全景圖</span>
+                        </button>
+
+                        <div id="uploadProgress" class="loading">
+                            <div class="flex items-center justify-center text-blue-600">
+                                <i class="fas fa-spinner fa-spin mr-2"></i>
+                                <span>上傳中，請稍候...</span>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- 全景圖查看器與列表 -->
+                <div class="grid grid-cols-1 lg:grid-cols-4 gap-8">
+                    <!-- 全景圖列表 -->
+                    <div class="lg:col-span-1">
+                        <h2 class="text-xl font-semibold text-gray-800 mb-4">
+                            <i class="fas fa-images text-blue-500"></i> 全景圖列表
+                        </h2>
+
+                        <div id="panoramaList" class="space-y-2 max-h-96 overflow-y-auto">
+                            <div class="text-center text-gray-500 py-8">
+                                <i class="fas fa-image text-4xl mb-2"></i>
+                                <p>尚無全景圖</p>
+                                <p class="text-sm">請先上傳圖片</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 全景圖查看器 -->
+                    <div class="lg:col-span-3">
+                        <div class="flex justify-between items-center mb-4">
+                            <div>
+                                <h2 class="text-2xl font-semibold text-gray-800" id="currentTitle">
+                                    全景圖查看器
+                                </h2>
+                                <p class="text-gray-600 text-sm" id="currentDescription"></p>
+                            </div>
+
+                            <div class="flex space-x-2" id="viewerControls" style="display: none;">
+                                <button onclick="sharePanorama()"
+                                        class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg transition">
+                                    <i class="fas fa-share-alt"></i> 分享
+                                </button>
+                                <button onclick="editPanorama()"
+                                        class="bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded-lg transition">
+                                    <i class="fas fa-edit"></i> 編輯
+                                </button>
+                                <button onclick="deletePanorama()"
+                                        class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg transition">
+                                    <i class="fas fa-trash"></i> 刪除
+                                </button>
+                            </div>
+                        </div>
+
+                        <div id="panoramaContainer">
+                            <div id="panorama" class="bg-gray-100 flex items-center justify-center">
+                                <div class="text-center text-gray-500">
+                                    <i class="fas fa-globe text-6xl mb-4"></i>
+                                    <p class="text-xl">請選擇或上傳全景圖</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 合輯管理標籤 -->
+            <div id="albums-tab" class="tab-content p-6">
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    <!-- 合輯列表 -->
+                    <div class="lg:col-span-1">
+                        <div class="flex justify-between items-center mb-4">
+                            <h2 class="text-xl font-semibold text-gray-800">
+                                <i class="fas fa-layer-group text-blue-500"></i> 合輯列表
+                            </h2>
+                            <button onclick="showCreateAlbumModal()"
+                                    class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition text-sm">
+                                <i class="fas fa-plus mr-2"></i>新增
+                            </button>
+                        </div>
+
+                        <div id="albumList" class="space-y-2 max-h-96 overflow-y-auto">
+                            <div class="text-center text-gray-500 py-8">
+                                <i class="fas fa-layer-group text-4xl mb-2"></i>
+                                <p>尚無合輯</p>
+                                <p class="text-sm">點擊上方新增按鈕</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 合輯詳情 -->
+                    <div class="lg:col-span-2">
+                        <div id="albumDetail" class="hidden">
+                            <div class="flex justify-between items-center mb-4">
+                                <div>
+                                    <h2 class="text-2xl font-semibold text-gray-800" id="albumTitle"></h2>
+                                    <p class="text-gray-600 text-sm" id="albumDescription"></p>
+                                </div>
+
+                                <div class="flex space-x-2">
+                                    <button onclick="shareAlbum()"
+                                            class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg transition">
+                                        <i class="fas fa-share-alt"></i> 分享
+                                    </button>
+                                    <button onclick="editAlbum()"
+                                            class="bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded-lg transition">
+                                        <i class="fas fa-edit"></i> 編輯
+                                    </button>
+                                    <button onclick="deleteAlbum()"
+                                            class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg transition">
+                                        <i class="fas fa-trash"></i> 刪除
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="bg-white rounded-lg border p-4">
+                                <h3 class="font-semibold text-gray-700 mb-3">
+                                    <i class="fas fa-images mr-2"></i>合輯中的全景圖 (<span id="albumPanoramaCount">0</span>)
+                                </h3>
+                                <div id="albumPanoramas" class="grid grid-cols-2 gap-4">
+                                    <!-- 動態生成 -->
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="albumPlaceholder" class="text-center text-gray-500 py-20">
+                            <i class="fas fa-layer-group text-6xl mb-4"></i>
+                            <p class="text-xl">請選擇一個合輯查看詳情</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 編輯全景圖對話框 -->
+    <div id="editModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+        <div class="bg-white rounded-lg p-8 max-w-md w-full mx-4">
+            <h3 class="text-2xl font-semibold text-gray-800 mb-4">編輯全景圖資訊</h3>
+
+            <form id="editForm" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">標題</label>
+                    <input type="text" id="editTitle" required
+                           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">描述</label>
+                    <textarea id="editDescription" rows="3"
+                              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"></textarea>
+                </div>
+
+                <div class="flex space-x-4">
+                    <button type="submit" class="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded-lg">
+                        儲存
+                    </button>
+                    <button type="button" onclick="closeEditModal()"
+                            class="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-800 py-2 px-4 rounded-lg">
+                        取消
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 分享對話框 -->
+    <div id="shareModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+        <div class="bg-white rounded-lg p-8 max-w-lg w-full mx-4">
+            <h3 class="text-2xl font-semibold text-gray-800 mb-4">
+                <i class="fas fa-share-alt text-green-500 mr-2"></i><span id="shareModalTitle">分享</span>
+            </h3>
+
+            <p class="text-gray-600 mb-4" id="shareModalDesc">
+                使用下方的唯讀連結分享。收到連結的人只能查看，無法編輯或刪除。
+            </p>
+
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-2">分享連結</label>
+                <div class="flex space-x-2">
+                    <input type="text" id="shareLink" readonly
+                           class="flex-1 px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-sm font-mono"
+                           value="">
+                    <button onclick="copyShareLink()"
+                            class="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-lg transition whitespace-nowrap">
+                        <i class="fas fa-copy mr-2"></i>複製
+                    </button>
+                </div>
+            </div>
+
+            <div class="flex space-x-4">
+                <button onclick="openShareLink()"
+                        class="flex-1 bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded-lg">
+                    <i class="fas fa-external-link-alt mr-2"></i>開啟預覽
+                </button>
+                <button onclick="closeShareModal()"
+                        class="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-800 py-2 px-4 rounded-lg">
+                    <i class="fas fa-times mr-2"></i>關閉
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 刪除確認對話框 -->
+    <div id="deleteModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+        <div class="bg-white rounded-lg p-8 max-w-md w-full mx-4">
+            <h3 class="text-2xl font-semibold text-gray-800 mb-4">
+                <i class="fas fa-exclamation-triangle text-red-500 mr-2"></i><span id="deleteModalTitle">刪除</span>
+            </h3>
+
+            <p class="text-gray-600 mb-4" id="deleteModalDesc">
+                確定要刪除嗎？此操作無法復原。
+            </p>
+
+            <form id="deleteForm" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        管理員密碼 <span class="text-red-500">*</span>
+                    </label>
+                    <input type="password" id="deletePassword" required
+                           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
+                           placeholder="請輸入管理員密碼">
+                </div>
+
+                <div class="flex space-x-4">
+                    <button type="submit" class="flex-1 bg-red-500 hover:bg-red-600 text-white py-2 px-4 rounded-lg">
+                        <i class="fas fa-trash mr-2"></i>確認刪除
+                    </button>
+                    <button type="button" onclick="closeDeleteModal()"
+                            class="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-800 py-2 px-4 rounded-lg">
+                        取消
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 創建/編輯合輯對話框 -->
+    <div id="albumModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+        <div class="bg-white rounded-lg p-8 max-w-3xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <h3 class="text-2xl font-semibold text-gray-800 mb-4">
+                <i class="fas fa-layer-group text-blue-500 mr-2"></i><span id="albumModalTitle">創建合輯</span>
+            </h3>
+
+            <form id="albumForm" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        合輯名稱 <span class="text-red-500">*</span>
+                    </label>
+                    <input type="text" id="albumNameInput" required
+                           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                           placeholder="例如: 台北一日遊">
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        合輯描述（選填）
+                    </label>
+                    <textarea id="albumDescInput" rows="2"
+                              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                              placeholder="添加一些描述..."></textarea>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        選擇全景圖 <span class="text-gray-500">(可選擇多張)</span>
+                    </label>
+                    <div id="panoramaSelection" class="grid grid-cols-2 md:grid-cols-3 gap-3 max-h-64 overflow-y-auto border rounded-lg p-3">
+                        <!-- 動態生成 -->
+                    </div>
+                </div>
+
+                <div id="selectedPanoramasOrder" class="hidden">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        已選擇的全景圖順序 <span class="text-gray-500">(可調整順序)</span>
+                    </label>
+                    <div id="selectedPanoramasList" class="space-y-2">
+                        <!-- 動態生成 -->
+                    </div>
+                </div>
+
+                <div class="flex space-x-4">
+                    <button type="submit" class="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded-lg">
+                        <i class="fas fa-save mr-2"></i>儲存
+                    </button>
+                    <button type="button" onclick="closeAlbumModal()"
+                            class="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-800 py-2 px-4 rounded-lg">
+                        取消
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

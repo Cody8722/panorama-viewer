@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title id="pageTitle">全景圖查看器</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Pannellum CSS & JS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.css"/>
+    <script src="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.js"></script>
+
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"/>
+
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+        }
+
+        #panorama {
+            width: 100vw;
+            height: 100vh;
+        }
+
+        #info-panel {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            max-width: 400px;
+            z-index: 1000;
+            transition: transform 0.3s ease;
+        }
+
+        #info-panel.hidden {
+            transform: translateX(-450px);
+        }
+
+        #toggle-info {
+            position: absolute;
+            top: 30px;
+            left: 20px;
+            background: rgba(255, 255, 255, 0.95);
+            border: none;
+            padding: 12px 16px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            cursor: pointer;
+            z-index: 999;
+            transition: all 0.3s ease;
+        }
+
+        #toggle-info:hover {
+            background: rgba(255, 255, 255, 1);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+        }
+
+        #toggle-info.panel-hidden {
+            left: 20px;
+        }
+
+        #toggle-info.panel-visible {
+            left: 460px;
+        }
+
+        .nav-button {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(255, 255, 255, 0.9);
+            border: none;
+            padding: 20px;
+            border-radius: 50%;
+            cursor: pointer;
+            z-index: 1000;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
+        }
+
+        .nav-button:hover:not(:disabled) {
+            background: rgba(255, 255, 255, 1);
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+            transform: translateY(-50%) scale(1.1);
+        }
+
+        .nav-button:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+
+        #prev-button {
+            left: 20px;
+        }
+
+        #next-button {
+            right: 20px;
+        }
+
+        #thumbnail-bar {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px;
+            display: flex;
+            gap: 10px;
+            overflow-x: auto;
+            z-index: 1000;
+        }
+
+        #thumbnail-bar::-webkit-scrollbar {
+            height: 8px;
+        }
+
+        #thumbnail-bar::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        #thumbnail-bar::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 4px;
+        }
+
+        .thumbnail {
+            flex-shrink: 0;
+            width: 120px;
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 2px solid transparent;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .thumbnail:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateY(-5px);
+        }
+
+        .thumbnail.active {
+            border-color: #3b82f6;
+            background: rgba(59, 130, 246, 0.2);
+        }
+
+        .thumbnail-title {
+            color: white;
+            font-size: 0.875rem;
+            font-weight: 500;
+            margin-top: 5px;
+            text-overflow: ellipsis;
+            overflow: hidden;
+            white-space: nowrap;
+        }
+
+        .loading-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            color: white;
+        }
+
+        .loading-screen.hidden {
+            display: none;
+        }
+
+        .error-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .error-screen.active {
+            display: flex;
+        }
+
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid white;
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        #counter {
+            position: absolute;
+            top: 30px;
+            right: 30px;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-weight: 600;
+            z-index: 1000;
+        }
+    </style>
+</head>
+<body>
+    <!-- 後端 URL 設定 -->
+    <script>
+        window.BACKEND_URL = 'https://panorama-viewe-back.zeabur.app';
+    </script>
+
+    <!-- 載入中畫面 -->
+    <div id="loadingScreen" class="loading-screen">
+        <div class="spinner mb-6"></div>
+        <h2 class="text-3xl font-bold mb-2">正在載入...</h2>
+        <p class="text-lg opacity-80">請稍候</p>
+    </div>
+
+    <!-- 錯誤畫面 -->
+    <div id="errorScreen" class="error-screen">
+        <i class="fas fa-exclamation-triangle text-8xl mb-6"></i>
+        <h2 class="text-4xl font-bold mb-4">無法載入</h2>
+        <p class="text-xl mb-2" id="errorMessage">發生未知錯誤</p>
+        <p class="text-lg opacity-80 mb-6">請檢查連結是否正確</p>
+        <button onclick="window.location.reload()"
+                class="bg-white text-red-500 px-8 py-3 rounded-lg font-semibold hover:bg-gray-100 transition">
+            <i class="fas fa-redo mr-2"></i>重新載入
+        </button>
+    </div>
+
+    <!-- 資訊面板切換按鈕 -->
+    <button id="toggle-info" class="panel-visible">
+        <i class="fas fa-info-circle text-xl"></i>
+    </button>
+
+    <!-- 圖片計數器 (僅合輯顯示) -->
+    <div id="counter" style="display: none;">
+        <span id="current-index">1</span> / <span id="total-count">1</span>
+    </div>
+
+    <!-- 資訊面板 -->
+    <div id="info-panel">
+        <div class="flex items-start justify-between mb-4">
+            <div>
+                <h1 class="text-2xl font-bold text-gray-800 mb-1" id="panoramaTitle">
+                    全景圖
+                </h1>
+                <p class="text-sm text-gray-500" id="panoramaInfo"></p>
+            </div>
+            <i class="fas fa-globe text-3xl text-blue-500"></i>
+        </div>
+
+        <p class="text-gray-700 mb-4" id="panoramaDescription">
+            載入中...
+        </p>
+
+        <div class="border-t border-gray-200 pt-4">
+            <h3 class="font-semibold text-gray-800 mb-3">
+                <i class="fas fa-mouse text-blue-500 mr-2"></i>操作說明
+            </h3>
+            <ul class="space-y-2 text-sm text-gray-600">
+                <li>
+                    <i class="fas fa-hand-pointer text-blue-400 mr-2"></i>
+                    滑鼠拖曳旋轉視角
+                </li>
+                <li>
+                    <i class="fas fa-search text-blue-400 mr-2"></i>
+                    滾輪縮放畫面
+                </li>
+                <li>
+                    <i class="fas fa-expand text-blue-400 mr-2"></i>
+                    點擊全螢幕圖示進入全螢幕
+                </li>
+                <li id="albumNavHint" style="display: none;">
+                    <i class="fas fa-arrow-left text-blue-400 mr-1"></i>
+                    <i class="fas fa-arrow-right text-blue-400 mr-2"></i>
+                    使用左右鍵或按鈕切換圖片
+                </li>
+            </ul>
+        </div>
+
+        <div class="border-t border-gray-200 pt-4 mt-4">
+            <p class="text-xs text-gray-500 text-center">
+                <i class="fas fa-lock mr-1"></i>
+                唯讀模式 - 僅供查看
+            </p>
+        </div>
+    </div>
+
+    <!-- 切換按鈕 (僅合輯顯示) -->
+    <button id="prev-button" class="nav-button" onclick="navigatePanorama(-1)" style="display: none;">
+        <i class="fas fa-chevron-left text-2xl text-gray-700"></i>
+    </button>
+    <button id="next-button" class="nav-button" onclick="navigatePanorama(1)" style="display: none;">
+        <i class="fas fa-chevron-right text-2xl text-gray-700"></i>
+    </button>
+
+    <!-- 縮略圖列表 (僅合輯顯示) -->
+    <div id="thumbnail-bar" style="display: none;">
+        <!-- 動態生成 -->
+    </div>
+
+    <!-- 全景圖查看器 -->
+    <div id="panorama"></div>
+
+    <script>
+        let viewer = null;
+        let infoPanelVisible = true;
+        let isAlbum = false;
+        let albumData = null;
+        let currentPanoramaIndex = 0;
+
+        // 頁面載入時執行
+        document.addEventListener('DOMContentLoaded', function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const panoramaId = urlParams.get('id');
+            const albumId = urlParams.get('album');
+
+            if (albumId) {
+                isAlbum = true;
+                loadAlbum(albumId);
+            } else if (panoramaId) {
+                isAlbum = false;
+                loadSinglePanorama(panoramaId);
+            } else {
+                showError('缺少全景圖或合輯 ID');
+            }
+
+            // 資訊面板切換
+            document.getElementById('toggle-info').addEventListener('click', toggleInfoPanel);
+
+            // 鍵盤導航
+            document.addEventListener('keydown', function(e) {
+                if (!isAlbum) return;
+                if (e.key === 'ArrowLeft') {
+                    navigatePanorama(-1);
+                } else if (e.key === 'ArrowRight') {
+                    navigatePanorama(1);
+                }
+            });
+        });
+
+        // 載入單張全景圖
+        async function loadSinglePanorama(panoramaId) {
+            try {
+                const response = await fetch(`${window.BACKEND_URL}/api/panoramas/${panoramaId}`);
+
+                if (!response.ok) {
+                    if (response.status === 404) {
+                        throw new Error('找不到此全景圖');
+                    }
+                    throw new Error('載入失敗');
+                }
+
+                const panorama = await response.json();
+
+                document.title = panorama.title;
+                document.getElementById('pageTitle').textContent = panorama.title;
+                document.getElementById('panoramaTitle').textContent = panorama.title;
+                document.getElementById('panoramaDescription').textContent =
+                    panorama.description || '這是一張美麗的全景圖片';
+                document.getElementById('panoramaInfo').textContent =
+                    '上傳於 ' + formatDate(panorama.created_at);
+
+                displayPanorama(panoramaId);
+
+                setTimeout(() => {
+                    document.getElementById('loadingScreen').classList.add('hidden');
+                }, 500);
+
+            } catch (error) {
+                console.error('載入全景圖失敗:', error);
+                showError(error.message);
+            }
+        }
+
+        // 載入合輯
+        async function loadAlbum(albumId) {
+            try {
+                const response = await fetch(`${window.BACKEND_URL}/api/albums/${albumId}`);
+
+                if (!response.ok) {
+                    if (response.status === 404) {
+                        throw new Error('找不到此合輯');
+                    }
+                    throw new Error('載入失敗');
+                }
+
+                albumData = await response.json();
+
+                if (!albumData.panoramas || albumData.panoramas.length === 0) {
+                    throw new Error('此合輯沒有全景圖');
+                }
+
+                document.title = albumData.title;
+                document.getElementById('pageTitle').textContent = albumData.title;
+
+                // 顯示合輯控制
+                document.getElementById('counter').style.display = 'block';
+                document.getElementById('prev-button').style.display = 'block';
+                document.getElementById('next-button').style.display = 'block';
+                document.getElementById('thumbnail-bar').style.display = 'flex';
+                document.getElementById('albumNavHint').style.display = 'block';
+
+                // 渲染縮略圖
+                renderThumbnails();
+
+                // 載入第一張圖片
+                loadPanoramaByIndex(0);
+
+                setTimeout(() => {
+                    document.getElementById('loadingScreen').classList.add('hidden');
+                }, 500);
+
+            } catch (error) {
+                console.error('載入合輯失敗:', error);
+                showError(error.message);
+            }
+        }
+
+        // 渲染縮略圖列表
+        function renderThumbnails() {
+            const container = document.getElementById('thumbnail-bar');
+            container.innerHTML = albumData.panoramas.map((p, index) => `
+                <div class="thumbnail ${index === currentPanoramaIndex ? 'active' : ''}"
+                     onclick="loadPanoramaByIndex(${index})"
+                     id="thumb-${index}">
+                    <div class="thumbnail-title">${escapeHtml(p.title)}</div>
+                </div>
+            `).join('');
+        }
+
+        // 載入合輯中指定索引的全景圖
+        function loadPanoramaByIndex(index) {
+            if (!albumData || index < 0 || index >= albumData.panoramas.length) return;
+
+            currentPanoramaIndex = index;
+            const panorama = albumData.panoramas[index];
+
+            document.getElementById('panoramaTitle').textContent = albumData.title;
+            document.getElementById('panoramaInfo').textContent = `${index + 1} / ${albumData.panoramas.length}`;
+            document.getElementById('panoramaDescription').textContent =
+                panorama.description || panorama.title;
+
+            document.getElementById('current-index').textContent = index + 1;
+            document.getElementById('total-count').textContent = albumData.panoramas.length;
+
+            // 更新按鈕狀態
+            document.getElementById('prev-button').disabled = index === 0;
+            document.getElementById('next-button').disabled = index === albumData.panoramas.length - 1;
+
+            // 更新縮略圖
+            document.querySelectorAll('.thumbnail').forEach((thumb, i) => {
+                thumb.classList.toggle('active', i === index);
+            });
+
+            // 滾動到當前縮略圖
+            const currentThumb = document.getElementById(`thumb-${index}`);
+            if (currentThumb) {
+                currentThumb.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+            }
+
+            displayPanorama(panorama._id);
+        }
+
+        // 導航到上一張/下一張
+        function navigatePanorama(direction) {
+            if (!isAlbum) return;
+            const newIndex = currentPanoramaIndex + direction;
+            loadPanoramaByIndex(newIndex);
+        }
+
+        // 顯示全景圖
+        function displayPanorama(panoramaId) {
+            if (viewer) {
+                viewer.destroy();
+            }
+
+            viewer = pannellum.viewer('panorama', {
+                type: 'equirectangular',
+                panorama: `${window.BACKEND_URL}/api/panoramas/${panoramaId}/image`,
+                autoLoad: true,
+                showControls: true,
+                showFullscreenCtrl: true,
+                showZoomCtrl: true,
+                mouseZoom: true,
+                doubleClickZoom: true,
+                draggable: true,
+                keyboardZoom: true,
+                disableKeyboardCtrl: false,
+                compass: true,
+                northOffset: 0,
+                hfov: 100,
+                minHfov: 50,
+                maxHfov: 120,
+                pitch: 0,
+                yaw: 0
+            });
+        }
+
+        // 切換資訊面板
+        function toggleInfoPanel() {
+            const panel = document.getElementById('info-panel');
+            const button = document.getElementById('toggle-info');
+
+            infoPanelVisible = !infoPanelVisible;
+
+            if (infoPanelVisible) {
+                panel.classList.remove('hidden');
+                button.classList.remove('panel-hidden');
+                button.classList.add('panel-visible');
+            } else {
+                panel.classList.add('hidden');
+                button.classList.add('panel-hidden');
+                button.classList.remove('panel-visible');
+            }
+        }
+
+        // 顯示錯誤
+        function showError(message) {
+            document.getElementById('loadingScreen').classList.add('hidden');
+            document.getElementById('errorMessage').textContent = message;
+            document.getElementById('errorScreen').classList.add('active');
+        }
+
+        // 格式化日期
+        function formatDate(dateString) {
+            const date = new Date(dateString);
+            return date.toLocaleDateString('zh-TW', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+
+        // 轉義 HTML
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+    </script>
+</body>
+</html>

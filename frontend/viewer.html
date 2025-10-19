@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title id="pageTitle">全景圖查看器</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Pannellum CSS & JS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.css"/>
+    <script src="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.js"></script>
+
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"/>
+
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+        }
+
+        #panorama {
+            width: 100vw;
+            height: 100vh;
+        }
+
+        #info-panel {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            max-width: 400px;
+            z-index: 1000;
+            transition: transform 0.3s ease;
+        }
+
+        #info-panel.hidden {
+            transform: translateX(-450px);
+        }
+
+        #toggle-info {
+            position: absolute;
+            top: 30px;
+            left: 20px;
+            background: rgba(255, 255, 255, 0.95);
+            border: none;
+            padding: 12px 16px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            cursor: pointer;
+            z-index: 999;
+            transition: all 0.3s ease;
+        }
+
+        #toggle-info:hover {
+            background: rgba(255, 255, 255, 1);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+        }
+
+        #toggle-info.panel-hidden {
+            left: 20px;
+        }
+
+        #toggle-info.panel-visible {
+            left: 460px;
+        }
+
+        .loading-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            color: white;
+        }
+
+        .loading-screen.hidden {
+            display: none;
+        }
+
+        .error-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .error-screen.active {
+            display: flex;
+        }
+
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid white;
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <!-- 後端 URL 設定 -->
+    <script>
+        // 修改為您的後端 URL
+        // window.BACKEND_URL = 'http://localhost:5002';
+        window.BACKEND_URL = 'https://panorama-viewe-back.zeabur.app';
+    </script>
+
+    <!-- 載入中畫面 -->
+    <div id="loadingScreen" class="loading-screen">
+        <div class="spinner mb-6"></div>
+        <h2 class="text-3xl font-bold mb-2">正在載入全景圖...</h2>
+        <p class="text-lg opacity-80">請稍候</p>
+    </div>
+
+    <!-- 錯誤畫面 -->
+    <div id="errorScreen" class="error-screen">
+        <i class="fas fa-exclamation-triangle text-8xl mb-6"></i>
+        <h2 class="text-4xl font-bold mb-4">無法載入全景圖</h2>
+        <p class="text-xl mb-2" id="errorMessage">發生未知錯誤</p>
+        <p class="text-lg opacity-80 mb-6">請檢查連結是否正確</p>
+        <button onclick="window.location.reload()"
+                class="bg-white text-red-500 px-8 py-3 rounded-lg font-semibold hover:bg-gray-100 transition">
+            <i class="fas fa-redo mr-2"></i>重新載入
+        </button>
+    </div>
+
+    <!-- 資訊面板切換按鈕 -->
+    <button id="toggle-info" class="panel-visible">
+        <i class="fas fa-info-circle text-xl"></i>
+    </button>
+
+    <!-- 資訊面板 -->
+    <div id="info-panel">
+        <div class="flex items-start justify-between mb-4">
+            <div>
+                <h1 class="text-2xl font-bold text-gray-800 mb-1" id="panoramaTitle">
+                    全景圖
+                </h1>
+                <p class="text-sm text-gray-500" id="panoramaDate"></p>
+            </div>
+            <i class="fas fa-globe text-3xl text-blue-500"></i>
+        </div>
+
+        <p class="text-gray-700 mb-4" id="panoramaDescription">
+            載入中...
+        </p>
+
+        <div class="border-t border-gray-200 pt-4">
+            <h3 class="font-semibold text-gray-800 mb-3">
+                <i class="fas fa-mouse text-blue-500 mr-2"></i>操作說明
+            </h3>
+            <ul class="space-y-2 text-sm text-gray-600">
+                <li>
+                    <i class="fas fa-hand-pointer text-blue-400 mr-2"></i>
+                    滑鼠拖曳旋轉視角
+                </li>
+                <li>
+                    <i class="fas fa-search text-blue-400 mr-2"></i>
+                    滾輪縮放畫面
+                </li>
+                <li>
+                    <i class="fas fa-expand text-blue-400 mr-2"></i>
+                    點擊全螢幕圖示進入全螢幕
+                </li>
+                <li>
+                    <i class="fas fa-keyboard text-blue-400 mr-2"></i>
+                    使用方向鍵瀏覽
+                </li>
+            </ul>
+        </div>
+
+        <div class="border-t border-gray-200 pt-4 mt-4">
+            <p class="text-xs text-gray-500 text-center">
+                <i class="fas fa-lock mr-1"></i>
+                唯讀模式 - 僅供查看
+            </p>
+        </div>
+    </div>
+
+    <!-- 全景圖查看器 -->
+    <div id="panorama"></div>
+
+    <script>
+        let viewer = null;
+        let infoPanelVisible = true;
+
+        // 頁面載入時執行
+        document.addEventListener('DOMContentLoaded', function() {
+            // 從 URL 取得全景圖 ID
+            const urlParams = new URLSearchParams(window.location.search);
+            const panoramaId = urlParams.get('id');
+
+            if (!panoramaId) {
+                showError('缺少全景圖 ID');
+                return;
+            }
+
+            loadPanorama(panoramaId);
+
+            // 資訊面板切換
+            document.getElementById('toggle-info').addEventListener('click', toggleInfoPanel);
+        });
+
+        // 載入全景圖
+        async function loadPanorama(panoramaId) {
+            try {
+                // 取得全景圖資訊
+                const response = await fetch(`${window.BACKEND_URL}/api/panoramas/${panoramaId}`);
+
+                if (!response.ok) {
+                    if (response.status === 404) {
+                        throw new Error('找不到此全景圖');
+                    }
+                    throw new Error('載入失敗');
+                }
+
+                const panorama = await response.json();
+
+                // 更新頁面標題
+                document.title = panorama.title;
+                document.getElementById('pageTitle').textContent = panorama.title;
+
+                // 更新資訊面板
+                document.getElementById('panoramaTitle').textContent = panorama.title;
+                document.getElementById('panoramaDescription').textContent =
+                    panorama.description || '這是一張美麗的全景圖片';
+                document.getElementById('panoramaDate').textContent =
+                    '上傳於 ' + formatDate(panorama.created_at);
+
+                // 建立 Pannellum 查看器
+                viewer = pannellum.viewer('panorama', {
+                    type: 'equirectangular',
+                    panorama: `${window.BACKEND_URL}/api/panoramas/${panoramaId}/image`,
+                    autoLoad: true,
+                    showControls: true,
+                    showFullscreenCtrl: true,
+                    showZoomCtrl: true,
+                    mouseZoom: true,
+                    doubleClickZoom: true,
+                    draggable: true,
+                    keyboardZoom: true,
+                    disableKeyboardCtrl: false,
+                    compass: true,
+                    northOffset: 0,
+                    hfov: 100,
+                    minHfov: 50,
+                    maxHfov: 120,
+                    pitch: 0,
+                    yaw: 0
+                });
+
+                // 隱藏載入畫面
+                setTimeout(() => {
+                    document.getElementById('loadingScreen').classList.add('hidden');
+                }, 500);
+
+            } catch (error) {
+                console.error('載入全景圖失敗:', error);
+                showError(error.message);
+            }
+        }
+
+        // 切換資訊面板
+        function toggleInfoPanel() {
+            const panel = document.getElementById('info-panel');
+            const button = document.getElementById('toggle-info');
+
+            infoPanelVisible = !infoPanelVisible;
+
+            if (infoPanelVisible) {
+                panel.classList.remove('hidden');
+                button.classList.remove('panel-hidden');
+                button.classList.add('panel-visible');
+            } else {
+                panel.classList.add('hidden');
+                button.classList.add('panel-hidden');
+                button.classList.remove('panel-visible');
+            }
+        }
+
+        // 顯示錯誤
+        function showError(message) {
+            document.getElementById('loadingScreen').classList.add('hidden');
+            document.getElementById('errorMessage').textContent = message;
+            document.getElementById('errorScreen').classList.add('active');
+        }
+
+        // 格式化日期
+        function formatDate(dateString) {
+            const date = new Date(dateString);
+            return date.toLocaleDateString('zh-TW', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+
+        // 防止右鍵選單（可選）
+        // document.addEventListener('contextmenu', e => e.preventDefault());
+    </script>
+</body>
+</html>
